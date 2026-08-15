@@ -24,7 +24,7 @@ import requests
 from dotenv import load_dotenv
 
 
-DEFAULT_PORT = 8080
+DEFAULT_PORT = 80
 DEFAULT_PATH = "/callback"
 FYERS_BASE = os.environ.get("FYERS_API_BASE", "https://api.fyers.in")
 
@@ -68,7 +68,9 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(parsed.query)
-        code = q.get("code", [None])[0]
+        print(f"Received callback with query: {q}")
+        #code = q.get("auth_code", [None])[0]
+        code = next(iter(q.get("auth_code", [])), None)
         state = q.get("state", [None])[0]
         self.server.auth_code = code
         # Respond to browser
@@ -186,6 +188,7 @@ def main() -> int:
     print("Opening browser for authorization. If it fails, open this URL manually:")
     print(auth_url)
 
+    print(f"Starting local server on port {port} to receive the authorization code...")
     httpd = run_local_server(port)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -197,7 +200,7 @@ def main() -> int:
 
     print("Waiting for authorization callback on local server...")
     # wait up to 300 seconds
-    timeout = 300
+    timeout = 30
     start = time.time()
     while time.time() - start < timeout and httpd.auth_code is None:
         time.sleep(0.5)
