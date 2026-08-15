@@ -20,13 +20,16 @@ state = "sample"                                   ##  The state field here acts
 ### Connect to the sessionModel object here with the required input parameters
 appSession = fyersModel.SessionModel(client_id = client_id, redirect_uri = redirect_uri,response_type=response_type,state=state,secret_key=secret_key,grant_type=grant_type)
 
-auth_code = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiJQNkhEMVQ5WEdaIiwidXVpZCI6IjNmNTQxN2M4ZDJiYzQ1NDk5Njg4ZWM1MGZmNmQwZDg4IiwiaXBBZGRyIjoiIiwibm9uY2UiOiIiLCJzY29wZSI6IiIsImRpc3BsYXlfbmFtZSI6IkZBSjc5MjQzIiwib21zIjoiSzEiLCJoc21fa2V5IjoiMGQyN2ExYTVlODM2ZmI3ZDMzODgwYTVjYzljM2I1MTFjYzJmNWZlMTdlMGJiNzlmNmQ1OGNjZGEiLCJpc0RkcGlFbmFibGVkIjoiTiIsImlzTXRmRW5hYmxlZCI6Ik4iLCJhdWQiOiJbXCJkOjFcIixcImQ6MlwiLFwieDowXCIsXCJ4OjFcIl0iLCJleHAiOjE3ODY4MjIxMTUsImlhdCI6MTc4Njc5MjExNSwiaXNzIjoiYXBpLmxvZ2luLmZ5ZXJzLmluIiwibmJmIjoxNzg2NzkyMTE1LCJzdWIiOiJhdXRoX2NvZGUifQ.Tn9TN9s-9iE-2eP8Puq7s0fCEr2QfFp4GGF2h5lgD34"
+auth_code = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiJQNkhEMVQ5WEdaIiwidXVpZCI6IjU1Y2NjNTBmZGYxNjRkOWZhZGFhYTUyMTMyOGVhYjEzIiwiaXBBZGRyIjoiIiwibm9uY2UiOiIiLCJzY29wZSI6IiIsImRpc3BsYXlfbmFtZSI6IkZBSjc5MjQzIiwib21zIjoiSzEiLCJoc21fa2V5IjoiMGQyN2ExYTVlODM2ZmI3ZDMzODgwYTVjYzljM2I1MTFjYzJmNWZlMTdlMGJiNzlmNmQ1OGNjZGEiLCJpc0RkcGlFbmFibGVkIjoiTiIsImlzTXRmRW5hYmxlZCI6Ik4iLCJhdWQiOiJbXCJkOjFcIixcImQ6MlwiLFwieDowXCIsXCJ4OjFcIl0iLCJleHAiOjE3ODY4MjI5OTQsImlhdCI6MTc4Njc5Mjk5NCwiaXNzIjoiYXBpLmxvZ2luLmZ5ZXJzLmluIiwibmJmIjoxNzg2NzkyOTk0LCJzdWIiOiJhdXRoX2NvZGUifQ.zqBhpfGcKkr6R_ulK0JNRTmuBam7z0dTF8F4JRgxN6Q"
 appSession.set_token(auth_code)
 response = appSession.generate_token()
 
 ## There can be two cases over here you can successfully get the acccessToken over the request or you might get some error over here. so to avoid that have this in try except block
 try: 
+    print("Response:", response)
     access_token = response["access_token"]
+    refresh_token = response["refresh_token"]
     print("Access Token:", access_token)
+    print("Refresh Token:", refresh_token)
 except Exception as e:
     print(e,response)  ## This will help you in debugging then and there itself like what was the error and also you would be able to see the value you got in response variable. instead of getting key_error for unsuccessfull response.
