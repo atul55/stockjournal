@@ -26,7 +26,7 @@ response = appSession.generate_token()
 
 ## There can be two cases over here you can successfully get the acccessToken over the request or you might get some error over here. so to avoid that have this in try except block
 try: 
-    print("Response:", response)
+    #print("Response:", response)
     access_token = response["access_token"]
     refresh_token = response["refresh_token"]
     print("Access Token:", access_token)
