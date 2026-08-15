@@ -39,7 +39,22 @@ python fetch_trades.py --date 2026-08-14
 ```
 
 Notes
-- The script uses `FYERS_API_BASE` and `FYERS_TRADES_ENDPOINT` environment variables when provided.
-- If the API response wraps items, the script will try common keys like `data`, `items`, `orders`, or `trades`.
-- The script filters returned items by detecting common date fields such as `trade_date`, `date`, `timestamp`.
+
+Getting tokens automatically
+
+1. Populate your `.env` (or copy `.env.example`) with `FYERS_CLIENT_ID` and `FYERS_CLIENT_SECRET` and set `FYERS_REDIRECT_URI` to the redirect URI you registered.
+
+2. Run the OAuth helper which opens a browser, captures the authorization code, exchanges it for tokens, and writes them to `.env`:
+
+```bash
+python auth_fyers.py
+```
+
+3. After success, `FYERS_ACCESS_TOKEN` and `FYERS_REFRESH_TOKEN` will be written to `.env`. Then run the fetcher:
+
+```bash
+python fetch_trades.py --date 2026-08-14
+```
+
+If your registered redirect URI is not `http://localhost:8080/callback`, update `FYERS_REDIRECT_URI` accordingly and make sure your Developer Console entry matches the value exactly.
 
