@@ -4,30 +4,29 @@
 Usage:
   python fetch_trades.py --date 2026-08-14
 
-Requirements: set `FYERS_ACCESS_TOKEN` in environment or use --token.
+Requirements: set `FYERS_CLIENT_ID` and `FYERS_ACCESS_TOKEN` in `.env` or use the command-line options.
 """
 from __future__ import annotations
 
 import argparse
 import datetime
-import json
 import os
 import sys
 from typing import Any, Dict, List, Optional
 
-import requests
+from dotenv import load_dotenv
+from fyers_apiv3 import fyersModel
 
 
 def parse_args() -> argparse.Namespace:
+    load_dotenv()
     p = argparse.ArgumentParser(description="Fetch trades from Fyers API for a given date")
     p.add_argument("--date", required=True, help="Date in YYYY-MM-DD format to fetch trades for")
-    p.add_argument("--base", default=os.environ.get("FYERS_API_BASE", "https://api.fyers.in"),
-                   help="Fyers API base URL (env FYERS_API_BASE)")
-    p.add_argument("--endpoint", default=os.environ.get("FYERS_TRADES_ENDPOINT", "/api/v2/orders"),
-                   help="API endpoint path to fetch trades/orders (env FYERS_TRADES_ENDPOINT)")
+    p.add_argument("--client-id", default=os.environ.get("FYERS_CLIENT_ID"),
+                   help="Fyers client ID (env FYERS_CLIENT_ID)")
     p.add_argument("--token", default=os.environ.get("FYERS_ACCESS_TOKEN"),
                    help="Fyers access token (env FYERS_ACCESS_TOKEN)")
-    p.add_argument("--output", help="Write JSON output to file instead of stdout")
+    p.add_argument("--output", help="Write tabular output to a file instead of stdout")
     return p.parse_args()
 
 
@@ -45,7 +44,8 @@ def iso_date_from_value(val: Any) -> Optional[datetime.date]:
             return None
     # If it's a string, try common ISO formats
     if isinstance(val, str):
-        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%d-%m-%Y"):
+        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S",
+                "%d-%m-%Y", "%d-%b-%Y %H:%M:%S"):
             try:
                 return datetime.datetime.strptime(val.split("+")[0], fmt).date()
             except Exception:
@@ -64,7 +64,7 @@ def extract_items(data: Any) -> List[Dict[str, Any]]:
         return data
     if isinstance(data, dict):
         # Common wrappers
-        for key in ("data", "items", "orders", "trades", "result"):
+        for key in ("data", "items", "orders", "trades", "tradeBook", "tradeHistory", "result"):
             if key in data and isinstance(data[key], list):
                 return data[key]
         # If dict values are list-like, try to pick the first list
@@ -74,16 +74,31 @@ def extract_items(data: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def get_trades(base: str, endpoint: str, token: str, params: Optional[Dict[str, Any]] = None) -> Any:
-    url = base.rstrip("/") + (endpoint if endpoint.startswith("/") else f"/{endpoint}")
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    resp = requests.get(url, headers=headers, params=params or {}, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+def get_trades(client_id: str, token: str, target_date: datetime.date) -> Any:
+    fyers = fyersModel.FyersModel(
+        token=token,
+        is_async=False,
+        client_id=client_id,
+        log_path="",
+    )
+    response = fyers.tradehistory({
+        "symbol": "",
+        "from_date": target_date.isoformat(),
+        "to_date": target_date.isoformat(),
+        "page_no": 1,
+        "page_size": 100,
+        "segment_type": "0",
+        "exchange_type": "0",
+    })
+    if isinstance(response, dict) and response.get("s") == "error":
+        code = response.get("code", "unknown")
+        message = response.get("message", "Fyers API request failed")
+        raise RuntimeError(f"Fyers API error ({code}): {message}")
+    return response
 
 
 def filter_by_date(items: List[Dict[str, Any]], target: datetime.date) -> List[Dict[str, Any]]:
-    keys_to_check = ("trade_date", "date", "created_at", "timestamp", "time")
+    keys_to_check = ("trade_date", "date", "created_at", "timestamp", "time", "orderDateTime")
     out = []
     for it in items:
         found = None
@@ -107,8 +122,39 @@ def filter_by_date(items: List[Dict[str, Any]], target: datetime.date) -> List[D
     return out
 
 
+def format_table(items: List[Dict[str, Any]]) -> str:
+    columns = ("symbol", "orderDateTime", "trade_price", "traded_qty")
+    sorted_items = sorted(
+        items,
+        key=lambda item: (
+            item.get("traded_qty", 0),
+            str(item.get("symbol", "")).casefold(),
+            datetime.datetime.strptime(
+                str(item.get("orderDateTime", "")), "%d-%b-%Y %H:%M:%S"
+            ) if item.get("orderDateTime") else datetime.datetime.max,
+        ),
+    )
+    rows = [[str(item.get(column, "")) for column in columns] for item in sorted_items]
+    widths = [len(column) for column in columns]
+    for row in rows:
+        for index, value in enumerate(row):
+            widths[index] = max(widths[index], len(value))
+
+    def format_row(row: List[str]) -> str:
+        return " | ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+
+    header = format_row(list(columns))
+    separator = "-+-".join("-" * width for width in widths)
+    output = [header, separator]
+    output.extend(format_row(row) for row in rows)
+    return "\n".join(output)
+
+
 def main() -> int:
     args = parse_args()
+    if not args.client_id:
+        print("Missing Fyers client ID. Set FYERS_CLIENT_ID or pass --client-id", file=sys.stderr)
+        return 2
     if not args.token:
         print("Missing Fyers access token. Set FYERS_ACCESS_TOKEN or pass --token", file=sys.stderr)
         return 2
@@ -119,10 +165,7 @@ def main() -> int:
         return 2
 
     try:
-        resp = get_trades(args.base, args.endpoint, args.token)
-    except requests.HTTPError as e:
-        print(f"HTTP error: {e}", file=sys.stderr)
-        return 3
+        resp = get_trades(args.client_id, args.token, target_date)
     except Exception as e:
         print(f"Error fetching trades: {e}", file=sys.stderr)
         return 3
@@ -130,12 +173,12 @@ def main() -> int:
     items = extract_items(resp)
     filtered = filter_by_date(items, target_date)
 
-    out_json = json.dumps(filtered, indent=2, default=str)
+    output = format_table(filtered)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
-            f.write(out_json)
+            f.write(output)
     else:
-        print(out_json)
+        print(output)
     return 0
 
 

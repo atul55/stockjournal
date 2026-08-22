@@ -1,69 +1,89 @@
 # stockjournal
+
 Journaling of Stock Trades
 
 ## Project overview
 
-This repository contains small helpers to authenticate with the Fyers API and to fetch trades for a given date.
+This repository contains helpers for authenticating with the Fyers API, calling Fyers APIs, and fetching trades for a given date.
 
 Key files
 
-- [fetch_trades.py](fetch_trades.py#L1-L999): fetch trades (or orders) from Fyers and filter by date.
-- [auth_fyers.py](auth_fyers.py#L1-L999): local OAuth helper — opens the authorize URL, captures the code, exchanges for tokens, and writes to `.env`.
-- [fyers1.py](fyers1.py#L1-L200), [fyers2.py](fyers2.py#L1-L200), [fyers3.py](fyers3.py#L1-L200): example scripts showing how to use the Fyers SDK. They read credentials from environment variables when present.
-- [.env.example](.env.example#L1-L20): sample environment variables to copy into `.env`.
+- [fyers_auth.py](fyers_auth.py): generate the Fyers access and refresh tokens through the OAuth flow and update `.env`.
+- [fyers_apis.py](fyers_apis.py): examples of Fyers user, transaction, order, position, and data API calls.
+- [fyers_refresh.py](fyers_refresh.py): request a new access token with an existing refresh token.
+- [fetch_trades.py](fetch_trades.py): fetch historical trades and filter them by date.
 - [requirements.txt](requirements.txt): Python dependencies.
 
-Quickstart
+## Setup
 
-1. Install dependencies:
+Install the dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Create a `.env` file by copying `.env.example` and fill in values:
+Create a `.env` file in the project directory with the values registered in the Fyers Developer Console:
 
-```bash
-copy .env.example .env  # Windows PowerShell
+```dotenv
+FYERS_CLIENT_ID=your_client_id
+FYERS_CLIENT_SECRET=your_client_secret
+FYERS_REDIRECT_URI=http://localhost/callback
+FYERS_ACCESS_TOKEN=
+FYERS_REFRESH_TOKEN=
 ```
 
-Edit `.env` and set at minimum:
+`FYERS_REDIRECT_URI` must exactly match the registered redirect URI, including the scheme, host, port, and path. The token entries should be present because `fyers_auth.py` updates their existing lines.
 
-- `FYERS_CLIENT_ID`
-- `FYERS_CLIENT_SECRET`
-- `FYERS_REDIRECT_URI` (must match the redirect URI registered in the Fyers Developer Console)
+## Generate tokens
 
-3. Obtain tokens (recommended):
+Use `fyers_auth.py` whenever a new authorization code and token pair is required:
 
 ```bash
-python auth_fyers.py
+python fyers_auth.py
 ```
 
-The helper will open the authorization URL in your browser. If your local server cannot receive the callback you can paste the redirect URL when prompted. On success the helper writes `FYERS_ACCESS_TOKEN` and `FYERS_REFRESH_TOKEN` to `.env`.
+The script opens the Fyers authorization page, listens for the `/callback` request, exchanges the authorization code, and writes `FYERS_ACCESS_TOKEN` and `FYERS_REFRESH_TOKEN` to `.env`. Use `--debug` for verbose token-exchange diagnostics.
 
-4. Fetch trades for a date:
+## Fetch trades
+
+After generating a token, fetch trades or orders for a date:
 
 ```bash
 python fetch_trades.py --date 2026-08-14
 ```
 
-Example: use the SDK directly
-
-After you have an access token in `.env` you can run the example scripts (they read credentials from environment):
+The script reads `FYERS_ACCESS_TOKEN` from `.env` or the environment. You can also provide a token explicitly:
 
 ```bash
-python fyers3.py
+python fetch_trades.py --date 2026-08-14 --token your_access_token
 ```
 
-Security notes
+The script uses the Fyers SDK `tradehistory` API with the requested date as both `from_date` and `to_date`, then filters the returned records locally as a safeguard. Override the client ID with `--client-id` when needed.
 
-- Never commit your `.env` to git. This repository includes a `.gitignore` that ignores `.env`.
+The output is a table with these columns:
+
+```text
+symbol | orderDateTime | trade_price | traded_qty
+```
+
+Rows are sorted by `traded_qty`, then `symbol`, then `orderDateTime`.
+
+Use `--output trades.txt` to write the table to a file.
+
+## Other scripts
+
+Run [fyers_apis.py](fyers_apis.py) after a token has been generated to exercise the SDK examples. Review its sample order payloads before enabling order-placement calls. [fyers_refresh.py](fyers_refresh.py) is available for refresh-token based access-token renewal.
+
+## Security notes
+
+- Never commit `.env` to git; it is ignored by this repository.
 - Treat `FYERS_CLIENT_SECRET`, `FYERS_ACCESS_TOKEN`, and `FYERS_REFRESH_TOKEN` as sensitive secrets.
 
-Debugging tips
+## Troubleshooting
 
-- If you see the 500 error `{"s":"error","code":500,"message":"Invalid Request, please provide valid method"}` in the browser, check that your authorize URL's `redirect_uri` exactly matches the registered redirect URI (scheme, host, port, and path). For local testing prefer `http://localhost:8080/callback`.
-- If token exchange fails, run `python auth_fyers.py` and paste the printed token-endpoint response here for diagnosis.
+- If Fyers returns `Invalid Request, please provide valid method`, verify that `FYERS_REDIRECT_URI` exactly matches the value registered in the Fyers Developer Console.
+- If the callback server cannot start, check that the redirect URI port is available and that the script has permission to bind to it.
+- Run `python fyers_auth.py --debug` to print token-exchange diagnostics.
 
 PowerShell: decode JWT helper
 
