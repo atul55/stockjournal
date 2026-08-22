@@ -9,6 +9,7 @@ Requirements: set `FYERS_CLIENT_ID` and `FYERS_ACCESS_TOKEN` in `.env` or use th
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime
 import os
 import sys
@@ -26,7 +27,6 @@ def parse_args() -> argparse.Namespace:
                    help="Fyers client ID (env FYERS_CLIENT_ID)")
     p.add_argument("--token", default=os.environ.get("FYERS_ACCESS_TOKEN"),
                    help="Fyers access token (env FYERS_ACCESS_TOKEN)")
-    p.add_argument("--output", help="Write tabular output to a file instead of stdout")
     return p.parse_args()
 
 
@@ -122,9 +122,9 @@ def filter_by_date(items: List[Dict[str, Any]], target: datetime.date) -> List[D
     return out
 
 
-def format_table(items: List[Dict[str, Any]]) -> str:
-    columns = ("symbol", "orderDateTime", "trade_price", "traded_qty")
-    sorted_items = sorted(
+def sort_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sort trades by quantity, symbol, and order time."""
+    return sorted(
         items,
         key=lambda item: (
             item.get("traded_qty", 0),
@@ -134,20 +134,15 @@ def format_table(items: List[Dict[str, Any]]) -> str:
             ) if item.get("orderDateTime") else datetime.datetime.max,
         ),
     )
-    rows = [[str(item.get(column, "")) for column in columns] for item in sorted_items]
-    widths = [len(column) for column in columns]
-    for row in rows:
-        for index, value in enumerate(row):
-            widths[index] = max(widths[index], len(value))
 
-    def format_row(row: List[str]) -> str:
-        return " | ".join(value.ljust(widths[index]) for index, value in enumerate(row))
 
-    header = format_row(list(columns))
-    separator = "-+-".join("-" * width for width in widths)
-    output = [header, separator]
-    output.extend(format_row(row) for row in rows)
-    return "\n".join(output)
+def write_csv(items: List[Dict[str, Any]]) -> None:
+    columns = ("symbol", "orderDateTime", "trade_price", "traded_qty")
+    writer = csv.DictWriter(sys.stdout, fieldnames=columns, extrasaction="ignore",
+                            lineterminator="\n")
+    writer.writeheader()
+    writer.writerows({column: item.get(column, "") for column in columns}
+                     for item in sort_items(items))
 
 
 def main() -> int:
@@ -173,12 +168,7 @@ def main() -> int:
     items = extract_items(resp)
     filtered = filter_by_date(items, target_date)
 
-    output = format_table(filtered)
-    if args.output:
-        with open(args.output, "w", encoding="utf-8") as f:
-            f.write(output)
-    else:
-        print(output)
+    write_csv(filtered)
     return 0
 
 

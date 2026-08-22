@@ -46,7 +46,7 @@ The script opens the Fyers authorization page, listens for the `/callback` reque
 
 ## Fetch trades
 
-After generating a token, fetch trades or orders for a date:
+After generating a token, fetch trades for a date:
 
 ```bash
 python fetch_trades.py --date 2026-08-14
@@ -60,15 +60,15 @@ python fetch_trades.py --date 2026-08-14 --token your_access_token
 
 The script uses the Fyers SDK `tradehistory` API with the requested date as both `from_date` and `to_date`, then filters the returned records locally as a safeguard. Override the client ID with `--client-id` when needed.
 
-The output is a table with these columns:
+The output is CSV text with these columns:
 
 ```text
-symbol | orderDateTime | trade_price | traded_qty
+symbol,orderDateTime,trade_price,traded_qty
 ```
 
 Rows are sorted by `traded_qty`, then `symbol`, then `orderDateTime`.
 
-Use `--output trades.txt` to write the table to a file.
+CSV output is written directly to the screen. The script does not create an output file.
 
 ## Other scripts
 
