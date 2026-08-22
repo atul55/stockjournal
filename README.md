@@ -70,6 +70,35 @@ Rows are sorted by `traded_qty`, then `symbol`, then `orderDateTime`.
 
 CSV output is written directly to the screen. The script does not create an output file.
 
+## Use from Excel
+
+Run the local API from the project directory:
+
+```powershell
+pip install -r requirements.txt
+python api.py
+```
+
+The API endpoint is:
+
+```text
+http://127.0.0.1:8000/trades?date=2026-08-20
+```
+
+In Excel, select **Data > Get Data > From Other Sources > From Web**, enter the endpoint URL, and load the returned table. The API returns `symbol`, `orderDateTime`, `trade_price`, and `traded_qty`, sorted by `traded_qty`, `symbol`, and `orderDateTime`.
+
+You can also use this Power Query expression, replacing the date as needed:
+
+```powerquery
+let
+    Source = Json.Document(Web.Contents("http://127.0.0.1:8000/trades?date=2026-08-20")),
+    Table = Table.FromRecords(Source)
+in
+    Table
+```
+
+Keep the API terminal running while Excel refreshes the query.
+
 ## Other scripts
 
 Run [fyers_apis.py](fyers_apis.py) after a token has been generated to exercise the SDK examples. Review its sample order payloads before enabling order-placement calls. [fyers_refresh.py](fyers_refresh.py) is available for refresh-token based access-token renewal.
