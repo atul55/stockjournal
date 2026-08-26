@@ -58,7 +58,7 @@ The script reads `FYERS_ACCESS_TOKEN` from `.env` or the environment. You can al
 python fetch_trades.py --date 2026-08-14 --token your_access_token
 ```
 
-The script uses the Fyers SDK `tradehistory` API with the requested date as both `from_date` and `to_date`, then filters the returned records locally as a safeguard. Override the client ID with `--client-id` when needed.
+The script uses the Fyers SDK `tradebook` API, then filters the returned records locally by the requested date as a safeguard. Override the client ID with `--client-id` when needed.
 
 The output is CSV text with these columns:
 

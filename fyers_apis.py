@@ -40,10 +40,13 @@ print("Holdings:", fyers.holdings())    ## This will provide the available holdi
 """
 2. Transaction Apis : This includes (Tradebook,Orderbook,Positions)
 """
+orderId = "26082600020989"
 
+data = {"id": orderId}
+        
 print("Tradebook:", fyers.tradebook())   ## This will provide all the trade related information 
 
-print("Orderbook:", fyers.orderbook())   ## This will provide the user with all the order realted information 
+print("Orderbook:", fyers.orderbook(data=data))   ## This will provide the user with all the order realted information 
 
 print("Positions:", fyers.positions())   ## This will provide the user with all the positions the user has on his end 
 

@@ -60,17 +60,28 @@ def iso_date_from_value(val: Any) -> Optional[datetime.date]:
 
 def extract_items(data: Any) -> List[Dict[str, Any]]:
     """Normalize response to a list of items to inspect for date fields."""
+    def normalize(items: List[Any]) -> List[Dict[str, Any]]:
+        normalized = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item = dict(item)
+            item.setdefault("trade_price", item.get("tradePrice", ""))
+            item.setdefault("traded_qty", item.get("tradedQty", ""))
+            normalized.append(item)
+        return normalized
+
     if isinstance(data, list):
-        return data
+        return normalize(data)
     if isinstance(data, dict):
         # Common wrappers
         for key in ("data", "items", "orders", "trades", "tradeBook", "tradeHistory", "result"):
             if key in data and isinstance(data[key], list):
-                return data[key]
+                return normalize(data[key])
         # If dict values are list-like, try to pick the first list
         for v in data.values():
             if isinstance(v, list):
-                return v
+                return normalize(v)
     return []
 
 
@@ -81,15 +92,7 @@ def get_trades(client_id: str, token: str, target_date: datetime.date) -> Any:
         client_id=client_id,
         log_path="",
     )
-    response = fyers.tradehistory({
-        "symbol": "",
-        "from_date": target_date.isoformat(),
-        "to_date": target_date.isoformat(),
-        "page_no": 1,
-        "page_size": 100,
-        "segment_type": "0",
-        "exchange_type": "0",
-    })
+    response = fyers.tradebook()
     if isinstance(response, dict) and response.get("s") == "error":
         code = response.get("code", "unknown")
         message = response.get("message", "Fyers API request failed")
