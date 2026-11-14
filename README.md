@@ -11,7 +11,8 @@ Key files
 - [fyers_auth.py](fyers_auth.py): generate the Fyers access and refresh tokens through the OAuth flow and update `.env`.
 - [fyers_apis.py](fyers_apis.py): examples of Fyers user, transaction, order, position, and data API calls.
 - [fyers_refresh.py](fyers_refresh.py): request a new access token with an existing refresh token.
-- [fetch_trades.py](fetch_trades.py): fetch historical trades and filter them by date.
+- [fetch_trades.py](fetch_trades.py): fetch current-day trades and filter them by date.
+- [fetch_trade_history.py](fetch_trade_history.py): fetch historical trades for a date using the Trade History API.
 - [requirements.txt](requirements.txt): Python dependencies.
 
 ## Setup
@@ -19,6 +20,9 @@ Key files
 Install the dependencies:
 
 ```bash
+python -m venv .venv
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
@@ -44,13 +48,21 @@ python fyers_auth.py
 
 The script opens the Fyers authorization page, listens for the `/callback` request, exchanges the authorization code, and writes `FYERS_ACCESS_TOKEN` and `FYERS_REFRESH_TOKEN` to `.env`. Use `--debug` for verbose token-exchange diagnostics.
 
-## Fetch trades
+## Fetch current-day trades
 
-After generating a token, fetch trades for a date:
+Fetch trades using the current-day Tradebook API and filter the response locally:
 
 ```bash
 python fetch_trades.py --date 2026-08-14
 ```
+
+Add `--debug` to print the raw Fyers tradebook response and date-filter counts to stderr while keeping CSV output on stdout:
+
+```bash
+python fetch_trades.py --date 2026-08-14 --debug
+```
+
+The debug response may contain personal trade details.
 
 The script reads `FYERS_ACCESS_TOKEN` from `.env` or the environment. You can also provide a token explicitly:
 
@@ -58,15 +70,31 @@ The script reads `FYERS_ACCESS_TOKEN` from `.env` or the environment. You can al
 python fetch_trades.py --date 2026-08-14 --token your_access_token
 ```
 
-The script uses the Fyers SDK `tradebook` API, then filters the returned records locally by the requested date as a safeguard. Override the client ID with `--client-id` when needed.
+The script uses the Fyers SDK `tradebook` API. This API returns current-day trades only; it cannot retrieve a prior date. Override the client ID with `--client-id` when needed.
+
+## Fetch historical trades
+
+Use the Trade History API to fetch trades for a past date:
+
+```bash
+python fetch_trade_history.py --date 2026-11-13
+```
+
+The script requests the selected date as both `from_date` and `to_date`, and retrieves all result pages. Add `--debug` to print request and response metadata to stderr while leaving CSV output on stdout:
+
+```bash
+python fetch_trade_history.py --date 2026-11-13 --debug
+```
+
+Like `fetch_trades.py`, it reads `FYERS_CLIENT_ID` and `FYERS_ACCESS_TOKEN` from `.env` or the environment. These can also be provided with `--client-id` and `--token`.
 
 The output is CSV text with these columns:
 
 ```text
-symbol,orderDateTime,trade_price,traded_qty
+symbol,option_contract,orderDateTime,trade_price,traded_qty
 ```
 
-Rows are sorted by `traded_qty`, then `symbol`, then `orderDateTime`.
+`option_contract` contains a readable description for recognized option symbols (for example, `NIFTY 17 NOV 25200 CALL`) and is blank for symbols that are not recognized option contracts. Rows are sorted by `traded_qty`, then `symbol`, then `orderDateTime`.
 
 CSV output is written directly to the screen. The script does not create an output file.
 
@@ -85,7 +113,7 @@ The API endpoint is:
 http://127.0.0.1:8000/trades?date=2026-08-20
 ```
 
-In Excel, select **Data > Get Data > From Other Sources > From Web**, enter the endpoint URL, and load the returned table. The API returns `symbol`, `orderDateTime`, `trade_price`, and `traded_qty`, sorted by `traded_qty`, `symbol`, and `orderDateTime`.
+In Excel, select **Data > Get Data > From Other Sources > From Web**, enter the endpoint URL, and load the returned table. The API returns `symbol`, `option_contract`, `orderDateTime`, `trade_price`, and `traded_qty`, sorted by `traded_qty`, `symbol`, and `orderDateTime`.
 
 You can also use this Power Query expression, replacing the date as needed:
 

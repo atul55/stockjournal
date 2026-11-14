@@ -12,18 +12,20 @@ from typing import Any, Dict, List
 
 from dotenv import load_dotenv
 
-from fetch_trades import extract_items, filter_by_date, get_trades, sort_items
+from fetch_trades import (
+    COLUMNS,
+    extract_items,
+    filter_by_date,
+    get_trades,
+    select_trade_columns,
+    sort_items,
+)
 
 load_dotenv()
 
-COLUMNS = ("symbol", "orderDateTime", "trade_price", "traded_qty")
-
 
 def select_columns(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return [
-        {column: item.get(column, "") for column in COLUMNS}
-        for item in sort_items(items)
-    ]
+    return [select_trade_columns(item) for item in sort_items(items)]
 
 
 class TradesRequestHandler(BaseHTTPRequestHandler):

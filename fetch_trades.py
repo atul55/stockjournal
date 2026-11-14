@@ -9,25 +9,42 @@ Requirements: set `FYERS_CLIENT_ID` and `FYERS_ACCESS_TOKEN` in `.env` or use th
 from __future__ import annotations
 
 import argparse
+import calendar
 import csv
 import datetime
 import os
+import re
 import sys
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from fyers_apiv3 import fyersModel
 
+COLUMNS = ("symbol", "option_contract", "orderDateTime", "trade_price", "traded_qty")
+OPTION_SYMBOL_RE = re.compile(
+    r"^(?P<underlying>[A-Z]+?)(?P<year>\d{2})"
+    r"(?P<month>1[0-2]|0?[1-9]|[OND])"
+    r"(?P<day>0[1-9]|[12]\d|3[01])"
+    r"(?P<strike>\d{4,})(?P<right>CE|PE)$"
+)
+
 
 def parse_args() -> argparse.Namespace:
     load_dotenv()
     p = argparse.ArgumentParser(description="Fetch trades from Fyers API for a given date")
     p.add_argument("--date", required=True, help="Date in YYYY-MM-DD format to fetch trades for")
+    p.add_argument("--debug", action="store_true",
+                   help="Print the Fyers response and filtering details to stderr")
     p.add_argument("--client-id", default=os.environ.get("FYERS_CLIENT_ID"),
                    help="Fyers client ID (env FYERS_CLIENT_ID)")
     p.add_argument("--token", default=os.environ.get("FYERS_ACCESS_TOKEN"),
                    help="Fyers access token (env FYERS_ACCESS_TOKEN)")
     return p.parse_args()
+
+
+def debug_print(enabled: bool, message: str) -> None:
+    if enabled:
+        print(f"DEBUG: {message}", file=sys.stderr)
 
 
 def iso_date_from_value(val: Any) -> Optional[datetime.date]:
@@ -85,7 +102,47 @@ def extract_items(data: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def get_trades(client_id: str, token: str, target_date: datetime.date) -> Any:
+def format_option_contract(symbol: Any) -> str:
+    """Convert a dated Fyers option symbol to a readable contract description."""
+    if not isinstance(symbol, str):
+        return ""
+    symbol_name = symbol.rsplit(":", 1)[-1].upper()
+    match = OPTION_SYMBOL_RE.fullmatch(symbol_name)
+    if not match:
+        return ""
+
+    month_value = match.group("month")
+    month = {"O": 10, "N": 11, "D": 12}.get(month_value)
+    if month is None:
+        month = int(month_value)
+    day = int(match.group("day"))
+    try:
+        datetime.date(2000, month, day)
+    except ValueError:
+        return ""
+
+    month_name = calendar.month_abbr[month].upper()
+    option_type = "CALL" if match.group("right") == "CE" else "PUT"
+    return (
+        f"{match.group('underlying')} {day} {month_name} "
+        f"{match.group('strike')} {option_type}"
+    )
+
+
+def select_trade_columns(item: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        column: (
+            format_option_contract(item.get("symbol", ""))
+            if column == "option_contract"
+            else item.get(column, "")
+        )
+        for column in COLUMNS
+    }
+
+
+def get_trades(
+    client_id: str, token: str, target_date: datetime.date, debug: bool = False
+) -> Any:
     fyers = fyersModel.FyersModel(
         token=token,
         is_async=False,
@@ -93,6 +150,7 @@ def get_trades(client_id: str, token: str, target_date: datetime.date) -> Any:
         log_path="",
     )
     response = fyers.tradebook()
+    debug_print(debug, f"Fyers tradebook response: {response!r}")
     if isinstance(response, dict) and response.get("s") == "error":
         code = response.get("code", "unknown")
         message = response.get("message", "Fyers API request failed")
@@ -140,12 +198,10 @@ def sort_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def write_csv(items: List[Dict[str, Any]]) -> None:
-    columns = ("symbol", "orderDateTime", "trade_price", "traded_qty")
-    writer = csv.DictWriter(sys.stdout, fieldnames=columns, extrasaction="ignore",
+    writer = csv.DictWriter(sys.stdout, fieldnames=COLUMNS, extrasaction="ignore",
                             lineterminator="\n")
     writer.writeheader()
-    writer.writerows({column: item.get(column, "") for column in columns}
-                     for item in sort_items(items))
+    writer.writerows(select_trade_columns(item) for item in sort_items(items))
 
 
 def main() -> int:
@@ -163,13 +219,16 @@ def main() -> int:
         return 2
 
     try:
-        resp = get_trades(args.client_id, args.token, target_date)
+        debug_print(args.debug, f"Fetching trades for {target_date.isoformat()}")
+        resp = get_trades(args.client_id, args.token, target_date, debug=args.debug)
     except Exception as e:
         print(f"Error fetching trades: {e}", file=sys.stderr)
         return 3
 
     items = extract_items(resp)
+    debug_print(args.debug, f"Normalized {len(items)} trade item(s)")
     filtered = filter_by_date(items, target_date)
+    debug_print(args.debug, f"{len(filtered)} item(s) matched {target_date.isoformat()}")
 
     write_csv(filtered)
     return 0
