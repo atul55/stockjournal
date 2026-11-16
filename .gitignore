@@ -6,7 +6,7 @@ __pycache__/
 *.py[cod]
 
 # Environments
-venv/
+.venv/
 env/
 
 # IDE files
