@@ -59,7 +59,7 @@ python fetch_trades.py --date 2026-08-14
 Add `--debug` to print the raw Fyers tradebook response and date-filter counts to stderr while keeping CSV output on stdout:
 
 ```bash
-python fetch_trades.py --date 2026-08-14 --debug
+python fetch_trades.py --date 2026-11-17 --debug
 ```
 
 The debug response may contain personal trade details.
