@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 from dotenv import load_dotenv
 from fyers_apiv3 import fyersModel
 
-from fetch_trades import COLUMNS, extract_items, select_trade_columns
+from fetch_trades import COLUMNS, extract_items, select_trade_columns, sort_items
 
 PAGE_SIZE = 100
 
@@ -90,42 +90,12 @@ def get_history(
     return trades
 
 
-def order_time(item: Dict[str, Any]) -> datetime.datetime:
-    value = item.get("orderDateTime")
-    if isinstance(value, (int, float)):
-        timestamp = value / 1000 if value > 1e12 else value
-        try:
-            return datetime.datetime.fromtimestamp(timestamp)
-        except (OverflowError, OSError, ValueError):
-            return datetime.datetime.max
-    if isinstance(value, str):
-        for date_format in (
-            "%d-%b-%Y %H:%M:%S",
-            "%d-%m-%Y %H:%M:%S",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d %H:%M:%S",
-        ):
-            try:
-                return datetime.datetime.strptime(value, date_format)
-            except ValueError:
-                continue
-    return datetime.datetime.max
-
-
 def write_csv(items: List[Dict[str, Any]]) -> None:
     writer = csv.DictWriter(
         sys.stdout, fieldnames=COLUMNS, extrasaction="ignore", lineterminator="\n"
     )
     writer.writeheader()
-    sorted_items = sorted(
-        items,
-        key=lambda item: (
-            item.get("traded_qty", 0),
-            str(item.get("symbol", "")).casefold(),
-            order_time(item),
-        ),
-    )
-    writer.writerows(select_trade_columns(item) for item in sorted_items)
+    writer.writerows(select_trade_columns(item) for item in sort_items(items))
 
 
 def main() -> int:

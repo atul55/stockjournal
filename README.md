@@ -91,10 +91,11 @@ Like `fetch_trades.py`, it reads `FYERS_CLIENT_ID` and `FYERS_ACCESS_TOKEN` from
 The output is CSV text with these columns:
 
 ```text
-symbol,option_contract,orderDateTime,trade_price,traded_qty
+option_contract,side,trade_price,,orderDateTime,,,,traded_qty,symbol
 ```
 
-`option_contract` contains a readable description for recognized option symbols (for example, `NIFTY 17 NOV 25200 CALL`) and is blank for symbols that are not recognized option contracts. Rows are sorted by `traded_qty`, then `symbol`, then `orderDateTime`.
+The four blank header positions are intentionally empty CSV columns. `option_contract` contains a readable description for recognized option and futures symbols (for example, `NIFTY 26 NOV 25450 CALL` or `CRUDEOILM 26 DEC FUT`) and is blank for symbols that are not recognized. Rows are sorted chronologically by `orderDateTime`.
+`side` identifies each trade as `BUY` or `SELL`.
 
 CSV output is written directly to the screen. The script does not create an output file.
 

@@ -20,12 +20,32 @@ from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 from fyers_apiv3 import fyersModel
 
-COLUMNS = ("symbol", "option_contract", "orderDateTime", "trade_price", "traded_qty")
+COLUMNS = (
+    "option_contract",
+    "side",
+    "trade_price",
+    "",
+    "orderDateTime",
+    "",
+    "",
+    "",
+    "traded_qty",
+    "symbol",
+)
 OPTION_SYMBOL_RE = re.compile(
     r"^(?P<underlying>[A-Z]+?)(?P<year>\d{2})"
     r"(?P<month>1[0-2]|0?[1-9]|[OND])"
     r"(?P<day>0[1-9]|[12]\d|3[01])"
     r"(?P<strike>\d{4,})(?P<right>CE|PE)$"
+)
+MONTH_PATTERN = r"(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)"
+MONTHLY_OPTION_SYMBOL_RE = re.compile(
+    rf"^(?P<underlying>[A-Z][A-Z0-9]*?)(?P<year>\d{{2}})"
+    rf"(?P<month>{MONTH_PATTERN})(?P<strike>\d+)(?P<right>CE|PE)$"
+)
+FUTURE_SYMBOL_RE = re.compile(
+    rf"^(?P<underlying>[A-Z][A-Z0-9]*?)(?P<year>\d{{2}})"
+    rf"(?P<month>{MONTH_PATTERN})FUT$"
 )
 
 
@@ -103,10 +123,26 @@ def extract_items(data: Any) -> List[Dict[str, Any]]:
 
 
 def format_option_contract(symbol: Any) -> str:
-    """Convert a dated Fyers option symbol to a readable contract description."""
+    """Convert a Fyers option or future symbol to a readable contract description."""
     if not isinstance(symbol, str):
         return ""
     symbol_name = symbol.rsplit(":", 1)[-1].upper()
+
+    match = MONTHLY_OPTION_SYMBOL_RE.fullmatch(symbol_name)
+    if match:
+        option_type = "CALL" if match.group("right") == "CE" else "PUT"
+        return (
+            f"{match.group('underlying')} {match.group('year')} "
+            f"{match.group('month')} {match.group('strike')} {option_type}"
+        )
+
+    match = FUTURE_SYMBOL_RE.fullmatch(symbol_name)
+    if match:
+        return (
+            f"{match.group('underlying')} {match.group('year')} "
+            f"{match.group('month')} FUT"
+        )
+
     match = OPTION_SYMBOL_RE.fullmatch(symbol_name)
     if not match:
         return ""
@@ -129,11 +165,36 @@ def format_option_contract(symbol: Any) -> str:
     )
 
 
+def format_trade_side(side: Any) -> str:
+    """Convert Fyers' numeric trade side to a readable label."""
+    if side is None:
+        return ""
+    if isinstance(side, bool):
+        return str(side)
+    if side == 1:
+        return "BUY"
+    if side == -1:
+        return "SELL"
+    if isinstance(side, str):
+        normalized = side.strip().casefold()
+        if normalized in ("buy", "b"):
+            return "BUY"
+        if normalized in ("sell", "s"):
+            return "SELL"
+        if normalized == "1":
+            return "BUY"
+        if normalized == "-1":
+            return "SELL"
+    return str(side)
+
+
 def select_trade_columns(item: Dict[str, Any]) -> Dict[str, Any]:
     return {
         column: (
             format_option_contract(item.get("symbol", ""))
             if column == "option_contract"
+            else format_trade_side(item.get("side"))
+            if column == "side"
             else item.get(column, "")
         )
         for column in COLUMNS
@@ -183,18 +244,31 @@ def filter_by_date(items: List[Dict[str, Any]], target: datetime.date) -> List[D
     return out
 
 
+def order_time(item: Dict[str, Any]) -> datetime.datetime:
+    value = item.get("orderDateTime")
+    if isinstance(value, (int, float)):
+        timestamp = value / 1000 if value > 1e12 else value
+        try:
+            return datetime.datetime.fromtimestamp(timestamp)
+        except (OverflowError, OSError, ValueError):
+            return datetime.datetime.max
+    if isinstance(value, str):
+        for date_format in (
+            "%d-%b-%Y %H:%M:%S",
+            "%d-%m-%Y %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+        ):
+            try:
+                return datetime.datetime.strptime(value, date_format)
+            except ValueError:
+                continue
+    return datetime.datetime.max
+
+
 def sort_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Sort trades by quantity, symbol, and order time."""
-    return sorted(
-        items,
-        key=lambda item: (
-            item.get("traded_qty", 0),
-            str(item.get("symbol", "")).casefold(),
-            datetime.datetime.strptime(
-                str(item.get("orderDateTime", "")), "%d-%b-%Y %H:%M:%S"
-            ) if item.get("orderDateTime") else datetime.datetime.max,
-        ),
-    )
+    """Sort trades chronologically by order time."""
+    return sorted(items, key=order_time)
 
 
 def write_csv(items: List[Dict[str, Any]]) -> None:
